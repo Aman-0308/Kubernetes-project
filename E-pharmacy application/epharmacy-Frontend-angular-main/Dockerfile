@@ -29,7 +29,5 @@ COPY --from=BUILD /app/dist /usr/share/nginx/html
 
 # COPY --from=build /app/dist /usr/share/nginx/html copies the built files from the build container (the build stage) into Nginx’s default directory for serving HTML files (/usr/share/nginx/html).
 
-ENTRYPOINT ["/usr/sbin/nginx"]
-
 # Start the application
 CMD ["nginx", "-g", "daemon off;"]
