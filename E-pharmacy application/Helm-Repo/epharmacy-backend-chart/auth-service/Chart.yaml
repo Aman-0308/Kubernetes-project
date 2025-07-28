@@ -1,5 +1,0 @@
-apiVersion: v2
-name: epharmacy-auth-service
-description: A Helm chart for the Epharmacy auth-service deployment
-version: 0.1.0
-appVersion: "1.0"
