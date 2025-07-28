@@ -1,0 +1,194 @@
+pipeline {
+    agent none
+
+    // Variables used in this pipeline:
+    // - SCM: Source Code Management, set to GitHub URL (of Main branch for production env) is added during creation of the pipeline under SCM section. 
+    //   If Webhook is configured, it will trigger the pipeline on every commit to the main branch. No need to include the checkout Stage.
+    // - Git_URL: Git repository URL, set in environment block  - can be stored as Global variable
+    // - scannerHome: Path to SonarQube scanner CLI (installed in local machine), set in environment block - can be stored as Global variable
+    // - BUILD_NUMBER: Jenkins built-in environment variable, automatically assigned to the current build number (e.g., 42, 43...)
+    // - IMAGE_TAG: Set dynamically in the "Set Version Info" stage, here it equals BUILD_NUMBER
+    // - DOCKERHUB_USER / DOCKERHUB_PASS: Credentials retrieved securely from Jenkins credentials store
+    // - JOB_NAME: Jenkins built-in environment variable with the name of the current job
+    // - BUILD_URL: Jenkins built-in environment variable with the URL of the current build
+
+    environment {
+        Git_URL = 'https://github.com/Aman-0308/Devops-project.git'
+        scannerHome = '/var/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/CLI-Scanner'
+    }
+
+    stages {
+        stage('Checkout SCM') {
+            agent { label 'WorkerNode1' }
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build & Test in Parallel (Docker)') {
+            agent {
+                docker {
+                    image 'maven:3.8.6-openjdk-11' // Docker image with Maven + JDK
+                    args '-v $HOME/.m2:/root/.m2 -v $WORKSPACE:$WORKSPACE -w $WORKSPACE'
+                }
+            }
+            parallel {
+                stage('Install & Build') {
+                    steps {
+                        sh '''
+                            echo "Installing Node.js dependencies..."
+                            npm install
+
+                            echo "Building with Maven..."
+                            mvn clean install package
+                        '''
+                    }
+                }
+
+                stage('Dependency Check') {
+                    steps {
+                        sh 'mvn org.owasp:dependency-check-maven:check'
+                    }
+                }
+
+                stage('Selenium Tests') {
+                    steps {
+                        sh 'mvn test -Dtest=*SeleniumTest'
+                    }
+                }
+            }
+        }
+
+        stage('SonarQube Analysis (Host)') {
+            agent { label 'WorkerNode1' }
+            steps {
+                sh """
+                    ${scannerHome}/bin/sonar-scanner \
+                    -Dsonar.host.url=http://your.sonarqube.server:9000 \
+                    -Dsonar.projectKey=myapp \
+                    -Dsonar.sources=.
+                """
+            }
+        }
+
+        stage("Quality Gate") {
+            agent { label 'WorkerNode1' }
+            steps {
+                timeout(time: 1, unit: 'HOURS') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage("Approval to Build Docker Image") {
+            agent { label 'WorkerNode1' }
+            steps {
+                timeout(time: 12, unit: 'HOURS') {
+                    input message: "Approve to build Docker image?", ok: "Approve"
+                }
+            }
+        }
+
+        stage("Set Version Info") {
+            agent { label 'WorkerNode1' }
+            steps {
+                script {
+                    env.IMAGE_TAG = "${BUILD_NUMBER}"
+                    echo "Docker image tag set to: ${env.IMAGE_TAG}"
+                }
+            }
+        }
+
+        stage("Build Docker Images") {
+            agent { label 'WorkerNode1' }
+            parallel {
+                stage("Build Frontend") {
+                    steps {
+                        sh '''
+                            cd Mern-CICD/mern/frontend
+                            docker build -t mern-frontend:${IMAGE_TAG} .
+                        '''
+                    }
+                }
+                stage("Build Backend") {
+                    steps {
+                        sh '''
+                            cd Mern-CICD/mern/backend
+                            docker build -t mern-backend:${IMAGE_TAG} .
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage("Scan Docker Images (Trivy)") {
+            agent { label 'WorkerNode1' }
+            steps {
+                sh '''
+                    trivy image --format table --output trivy-report-frontend.txt mern-frontend:${IMAGE_TAG}
+                    trivy image --format table --output trivy-report-backend.txt mern-backend:${IMAGE_TAG}
+                '''
+            }
+        }
+
+        stage("Approval to Push Docker Images") {
+            agent { label 'WorkerNode1' }
+            steps {
+                archiveArtifacts artifacts: 'trivy-report-*.txt', fingerprint: true
+                timeout(time: 12, unit: 'HOURS') {
+                    input message: "Approve to push Docker images?", ok: "Approve"
+                }
+            }
+        }
+
+        stage("Push Docker Images to Hub") {
+            agent { label 'WorkerNode1' }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'Dockerhub', passwordVariable: 'DOCKERHUB_PASS', usernameVariable: 'DOCKERHUB_USER')]) {
+                    sh '''
+                        docker login -u ${DOCKERHUB_USER} -p ${DOCKERHUB_PASS}
+
+                        docker tag mern-frontend:${IMAGE_TAG} ${DOCKERHUB_USER}/mern-frontend:${IMAGE_TAG}
+                        docker tag mern-backend:${IMAGE_TAG} ${DOCKERHUB_USER}/mern-backend:${IMAGE_TAG}
+
+                        docker push ${DOCKERHUB_USER}/mern-frontend:${IMAGE_TAG}
+                        docker push ${DOCKERHUB_USER}/mern-backend:${IMAGE_TAG}
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            mail to: 'dev-team@example.com',
+                subject: "✅ Jenkins Build #${BUILD_NUMBER} Succeeded: ${JOB_NAME}",
+                body: """\
+                        The Jenkins build #${BUILD_NUMBER} for job '${JOB_NAME}' completed successfully.
+
+                        Artifacts and reports have been archived.
+
+                        You can view it at: ${BUILD_URL}
+
+                        Thanks,  
+                        Jenkins
+                    """
+        }
+
+        failure {
+            echo "Build failed. Skipping archive."
+
+            mail to: 'dev-team@example.com',
+                subject: "❌ Jenkins Build #${BUILD_NUMBER} FAILED: ${JOB_NAME}",
+                body: """\
+                        The Jenkins build #${BUILD_NUMBER} for job '${JOB_NAME}' has failed.
+
+                        Please check the console output and logs for details:  
+                        ${BUILD_URL}
+
+                        Thanks,  
+                        Jenkins
+                    """
+        }
+    }
+}

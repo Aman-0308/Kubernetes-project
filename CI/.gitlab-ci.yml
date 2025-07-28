@@ -1,0 +1,116 @@
+stages:
+  - checkout
+  - build_test
+  - sonar
+  - quality_gate
+  - approve_build
+  - versioning
+  - docker_build
+  - scan
+  - approve_push
+  - push
+  - notify
+
+variables:
+  GIT_URL: "https://github.com/Aman-0308/Devops-project.git"
+  SCANNER_HOME: "/var/jenkins/tools/hudson.plugins.sonar.SonarRunnerInstallation/CLI-Scanner"
+  IMAGE_TAG: "$CI_PIPELINE_IID"
+
+checkout:
+  stage: checkout
+  script:
+    - echo "SCM checkout is handled by GitLab automatically"
+
+build_test:
+  stage: build_test
+  image: maven:3.8.6-openjdk-11
+  services:
+    - docker:dind
+  parallel:
+    matrix:
+      - JOB: install_build
+      - JOB: dependency_check
+      - JOB: selenium_tests
+  script:
+    - |
+      if [ "$JOB" = "install_build" ]; then
+        npm install
+        mvn clean install package
+      elif [ "$JOB" = "dependency_check" ]; then
+        mvn org.owasp:dependency-check-maven:check
+      elif [ "$JOB" = "selenium_tests" ]; then
+        mvn test -Dtest=*SeleniumTest
+      fi
+
+sonarqube:
+  stage: sonar
+  script:
+    - |
+      $SCANNER_HOME/bin/sonar-scanner \
+      -Dsonar.host.url=http://your.sonarqube.server:9000 \
+      -Dsonar.projectKey=myapp \
+      -Dsonar.sources=.
+
+quality_gate:
+  stage: quality_gate
+  script:
+    - echo "Waiting for SonarQube Quality Gate..."
+    # GitLab doesn't have native waitForQualityGate, so this may need a custom script or webhook
+
+approve_build:
+  stage: approve_build
+  when: manual
+  script:
+    - echo "Manual approval to build Docker image"
+
+versioning:
+  stage: versioning
+  script:
+    - echo "Docker image tag set to: $IMAGE_TAG"
+
+docker_build:
+  stage: docker_build
+  services:
+    - docker:dind
+  parallel:
+    matrix:
+      - COMPONENT: frontend
+      - COMPONENT: backend
+  script:
+    - cd Mern-CICD/mern/$COMPONENT
+    - docker build -t mern-$COMPONENT:$IMAGE_TAG .
+
+scan:
+  stage: scan
+  script:
+    - trivy image --format table --output trivy-report-$COMPONENT.txt mern-$COMPONENT:$IMAGE_TAG
+  artifacts:
+    paths:
+      - trivy-report-*.txt
+
+approve_push:
+  stage: approve_push
+  when: manual
+  script:
+    - echo "Manual approval to push Docker images"
+
+push:
+  stage: push
+  services:
+    - docker:dind
+  script:
+    - echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
+    - docker tag mern-frontend:$IMAGE_TAG $DOCKERHUB_USER/mern-frontend:$IMAGE_TAG
+    - docker tag mern-backend:$IMAGE_TAG $DOCKERHUB_USER/mern-backend:$IMAGE_TAG
+    - docker push $DOCKERHUB_USER/mern-frontend:$IMAGE_TAG
+    - docker push $DOCKERHUB_USER/mern-backend:$IMAGE_TAG
+
+notify:
+  stage: notify
+  script:
+    - |
+      if [ "$CI_JOB_STATUS" == "success" ]; then
+        echo "✅ Build succeeded: $CI_PIPELINE_URL"
+      else
+        echo "❌ Build failed: $CI_PIPELINE_URL"
+      fi

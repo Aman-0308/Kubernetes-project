@@ -1,0 +1,43 @@
+global:
+  namespace: epharmacy
+  role: backend
+  version: v1
+
+replicaCount: 2
+
+image:
+  repository: frontend-service
+  tag: v1
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 6200
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "1.5Gi"
+    cpu: "1Gi"
+
+pvc:
+  claimName: azure-disk-sc
+
+hpa: 
+  metric:
+    name: Http_requests per minute
+    target:
+      type: AverageValue
+      averageValue: "10000"  # Adjust this value based on your application's needs
+
+vpa:
+  resourcePolicy:
+    minAllowed:
+      cpu: 250m
+      memory: 128Mi
+    maxAllowed:
+      cpu: 1Gi
+      memory: 1.5Gi

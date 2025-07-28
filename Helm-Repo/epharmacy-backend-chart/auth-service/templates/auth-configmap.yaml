@@ -1,0 +1,56 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+<<<<<<< HEAD
+  name: auth-config
+  labels:
+    app: Epharmacy-application
+data:
+  server.servlet.context-path: "/epharmacy"
+  auth.base.Url: "http://auth-service:1100/epharmacy/auth-api"
+  successRedirectUrl: "http://auth-service:1100/epharmacy/auth-api/auth"
+  auth-api: "/auth-api"
+  auth-access-api: "/auth-api/access"
+  auth-access.base.Url: "http://auth-access:1200/epharmacy/auth-api/access"
+  auth-credentialsValidation-api: "/auth-api/credentialsValidation"
+  auth-credentialsValidation.base.Url: "http://auth-credentialsValidation:1300/auth-api/credentialsValidation"
+  auth-entitlementValidation-api: "/auth-api/credentialsValidation"
+  auth-entitlementValidation.base.Url: "http://auth-entitlementValidation:1400/auth-api/credentialsValidation"
+  auth-deviceValidation-api: "/auth-api/credentialsValidation"
+  auth-deviceValidation.base.Url: "http://auth-deviceValidation:1500/epharmacy/auth-api/credentialsValidation"
+  auth-sessionValidation-api: "/auth-api/credentialsValidation"
+  auth-sessionValidation.base.Url: "http://auth-sessionValidation:1600/epharmacy/auth-api/credentialsValidation"
+  auth-vendorValidation-api: "/auth-api/credentialsValidation"
+  auth-vendorValidation.base.Url: "http://auth-vendorValidation:1700/epharmacy/auth-api/credentialsValidation"
+  spring.security.oauth2.client.registration.google.client-id: <base64-encoded-google-client-id>  # Replace with actual base64 encoded values
+  spring.security.oauth2.client.registration.google.client-secret: <<base64-encoded-google-client-secret>  # Replace with actual base64 encoded values
+  spring.security.oauth2.client.registration.google.authorization-grant-type: authorization_code
+  spring.security.oauth2.client.registration.google.redirect-uri: http://auth-service:1100/epharmacy/auth-api/login/oauth2/code/google
+  spring.security.oauth2.client.registration.google.scope: openid,profile,email
+
+  spring.security.oauth2.client.provider.google.authorization-uri: https://accounts.google.com/o/oauth2/v2/auth
+  spring.security.oauth2.client.provider.google.token-uri: https://oauth2.googleapis.com/token
+  spring.security.oauth2.client.provider.google.user-info-uri: https://openidconnect.googleapis.com/v1/userinfo
+=======
+  name: {{ include "auth-service.fullname" . }}-config
+  namespace: {{ .Values.namespace | default "default" }}
+  labels:
+    app: {{ include "auth-service.name" . }}
+data:
+  server.servlet.context-path: {{ .Values.configmap.serverContextPath | quote }}
+  auth.base.Url: {{ .Values.configmap.authBaseUrl | quote }}
+  successRedirectUrl: {{ .Values.configmap.successRedirectUrl | quote }}
+  auth-api: {{ .Values.configmap.authApi | quote }}
+  auth-access-api: {{ .Values.configmap.authAccessApi | quote }}
+  auth-access.base.Url: {{ .Values.configmap.authAccessBaseUrl | quote }}
+  auth-credentialsValidation-api: {{ .Values.configmap.authCredentialsValidationApi | quote }}
+  auth-credentialsValidation.base.Url: {{ .Values.configmap.authCredentialsValidationBaseUrl | quote }}
+  auth-entitlementValidation-api: {{ .Values.configmap.authEntitlementValidationApi | quote }}
+  auth-entitlementValidation.base.Url: {{ .Values.configmap.authEntitlementValidationBaseUrl | quote }}
+  auth-deviceValidation-api: {{ .Values.configmap.authDeviceValidationApi | quote }}
+  auth-deviceValidation.base.Url: {{ .Values.configmap.authDeviceValidationBaseUrl | quote }}
+  auth-sessionValidation-api: {{ .Values.configmap.authSessionValidationApi | quote }}
+  auth-sessionValidation.base.Url: {{ .Values.configmap.authSessionValidationBaseUrl | quote }}
+  auth-vendorValidation-api: {{ .Values.configmap.authVendorValidationApi | quote }}
+  auth-vendorValidation.base.Url: {{ .Values.configmap.authVendorValidationBaseUrl | quote }}
+>>>>>>> 5af0e54ac896d945d64acb946e037842bfa9b7cd
